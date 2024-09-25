@@ -82,17 +82,18 @@ class Scheduler:
     def manhattan_score(self, move):
         i, j = self.pacman.i, self.pacman.j
         i, j = i + self.pacman.ad[move][0], j + self.pacman.ad[move][1]
-        closest_ghost = min([abs(x.i-i) + abs(x.j-j) for x in self.ghosts])        
-        closest_food = min([abs(int(f.split(',')[0])-i)+abs(int(f.split(',')[1])-j) for f in self.foods])
-        # lower is better
-        return closest_food - closest_ghost
+        closest_ghost = min([abs(x.i-i) + abs(x.j-j) for x in self.ghosts]) 
+        closest_ghost = PACMAN_EATEN_SCORE if closest_ghost < 2 else 0       
+        closest_food = [abs(int(f.split(',')[0])-i)+abs(int(f.split(',')[1])-j) for f in self.foods]
+        closest_food = len([int(x<2) for x in closest_food])
+        # higher is better
+        return closest_food + closest_ghost
     
-    def argmin(self, moves):
+    def argmax(self, moves):
         scores = [self.manhattan_score(move) for move in moves]
-        idx = scores.index(min(scores))
+        idx = scores.index(max(scores))
         ret_move = moves[idx]
         return ret_move
-            
     
     def process(self, tick=0):
         board = 0
@@ -101,7 +102,7 @@ class Scheduler:
         try:
         # for i in [0]:
             while True:
-                move = self.argmin(self.pacman.alter_moves(self.wall))
+                move = self.argmax(self.pacman.alter_moves(self.wall))
                 before = self.pacman.position()
                 tick += 1
                 result.append(self.pacman.act(move, tick))

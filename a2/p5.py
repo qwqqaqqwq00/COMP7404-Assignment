@@ -94,27 +94,40 @@ class Scheduler:
     
 
     def add_score(self, node: List[GhostActor], turn=0):
+        """minimax k state score evaluate function.
+
+        Args:
+            node (List[GhostActor]): list of actor
+            turn (int, optional): who is active. Defaults to 0.
+
+        Returns:
+            float: the score value for minimax
+        """
+        # it is a difficult task to design the score evalution function
         i, j = node[0].raw_pos()
         uvlist = [[n.i, n.j] for n in node[1:]]
-        score = min(abs(i-u)+abs(j-v) for u, v in uvlist)
-        if score < 2:
-            score = PACMAN_EATEN_SCORE
-        xylist = [list(map(int, f.split(','))) for f in self.foods]
-        fd = min(abs(i-u)+abs(j-v) for u, v in xylist)
-        # score = EAT_FOOD_SCORE / fd if fd > 0 else 1
-        score -= fd
-        # away = abs(i-self.start[0])+abs(j-self.start[1])
+        # too close to GHOST!!! pacman deserve punishment
+        score = PACMAN_EATEN_SCORE if min(abs(i-u)+abs(j-v) for u, v in uvlist) < 2 else 0
+        if turn == 0:
+            xylist = [list(map(int, f.split(','))) for f in self.foods]
+            fd = [abs(i-u)+abs(j-v) for u, v in xylist]
+            fd = [v for v in fd if v < 2]
+            # how many foods surround pacman
+            score += EAT_FOOD_SCORE * len(fd)
         return score
-        # i, j = node[0].raw_pos()
-        # x, y = self.start
-        # # u, v = node[turn].raw_pos()
-        # # fds = [list(map(int, f.split(','))) for f in self.foods]
-        # # score = - math.sqrt((i-u)**2+(j-v)**2) - min([math.sqrt((i-a)**2+(j-b)**2) for a,b in fds])
-        # # score = (i-x)**2+(j-y)**2
-        # score = 0
-        # return score
 
-    def minimax_score(self, node: List[GhostActor], k: int, begin: int, turn: int):
+    def minimax_score(self, node: List[GhostActor], k: int, begin: int, turn: int, a: float=float('-inf'), b: float=float('inf')):
+        """score calculate node in k moves
+
+        Args:
+            node (List[GhostActor]): list of actor
+            k (int): k depth
+            begin (int): entry actor
+            turn (int): who is current actor
+
+        Returns:
+            float: expecti max score
+        """
         # terminate
         if k == 0:
             return self.add_score(node, turn)
@@ -122,28 +135,27 @@ class Scheduler:
         elif turn == begin:
             # pacman maximize
             org = node[turn].raw_pos()
-            # if f"{org[0]},{org[1]}" in [g.position() for g in node[1:]]:
-            if min(abs(node[0].i-u)+abs(node[0].j-v) for u, v in [[n.i, n.j] for n in node[1:]]) < 2:
-                return PACMAN_EATEN_SCORE
             moves = node[turn].alter_pos(self.wall, node[1:])
-            scores = []
+            score = float('-inf')
             for move in moves:
                 node[turn].act(move)
-                scores.append(self.minimax_score(node, k-1, begin, (turn+1) % len(node)))
+                score = max(score, self.minimax_score(node, k-1, begin, (turn+1) % len(node), a, b))
+                a = max(a, score)
+                if b <= a:
+                    break
             node[turn].act(org)
-            return max(scores) if len(scores)>0 else self.add_score(node, turn)
+            return score
         else:
             # ghost minimize
             org = node[turn].raw_pos()
-            if abs(org[0]-node[0].i)+abs(org[1]-node[0].j) < 2:
-                return PACMAN_EATEN_SCORE
             moves = node[turn].alter_pos(self.wall, node[1:])
-            scores = []
+            score = float('inf')
             for move in moves:
                 node[turn].act(move)
-                scores.append(self.minimax_score(node, k, begin, (turn+1) % len(node)))
+                score = min(score, self.minimax_score(node, k, begin, (turn+1) % len(node), a, b))
+                b = min(b, score)
             node[turn].act(org)
-            return min(scores) if len(scores)>0 else self.add_score(node, turn)
+            return score
     
     def minimax_move(self, k, begin: int=0):
         # start moving
@@ -176,9 +188,7 @@ class Scheduler:
         tick = tick
         result = []
         try:
-        # for i in [0]:
             while True:
-                # print(f'\rfoods: {len(self.foods)}', end='', flush=True)
                 move = self.minimax_move(k)
                 tick += 1
                 self.pacman.act(move, tick)

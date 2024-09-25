@@ -71,6 +71,7 @@ class GhostActor(Actor):
         
     def alter_moves(self, w: List[str], ghosts: List['GhostActor']):
         spaces = super().alter_moves(w, ghosts=ghosts)
+        # collision with other ghosts
         ghosts_pos = [g.position() for g in ghosts]
         ret_space = []
         for space in spaces:
@@ -102,16 +103,17 @@ class Scheduler:
         Returns:
             float: the score value for expecti max
         """
+        # it is a difficult task to design the score evalution function
         i, j = node[0].raw_pos()
         uvlist = [[n.i, n.j] for n in node[1:]]
-        score = min(abs(i-u)+abs(j-v) for u, v in uvlist)
-        if score < 2:
-            score = PACMAN_EATEN_SCORE
-        xylist = [list(map(int, f.split(','))) for f in self.foods]
-        fd = min(abs(i-u)+abs(j-v) for u, v in xylist)
-        # score = EAT_FOOD_SCORE / fd if fd > 0 else 1
-        score -= fd
-        # away = abs(i-self.start[0])+abs(j-self.start[1])
+        # too close to GHOST!!! pacman deserve punishment
+        score = PACMAN_EATEN_SCORE if min(abs(i-u)+abs(j-v) for u, v in uvlist) < 2 else 0
+        if turn == 0:
+            xylist = [list(map(int, f.split(','))) for f in self.foods]
+            fd = [abs(i-u)+abs(j-v) for u, v in xylist]
+            fd = [v for v in fd if v < 2]
+            # how many foods surround pacman
+            score += EAT_FOOD_SCORE * len(fd)
         return score
 
     def expecti_max_score(self, node: List[GhostActor], k: int, begin: int, turn: int):
@@ -138,12 +140,14 @@ class Scheduler:
             scores = []
             for move in moves:
                 node[turn].act(move)
-                scores.append(self.expecti_max_score(node, k-1, begin, (turn+1) % len(node)) )#+ EAT_FOOD_SCORE * int(f"{move[0]},{move[1]}" in self.foods))
+                # this one executed, then next one execute
+                scores.append(self.expecti_max_score(node, k-1, begin, (turn+1) % len(node)))
+            # reset moves
             node[turn].act(org)
-            # print(scores)
+            # select max score or score of current state
             return max(scores) if len(scores)>0 else self.add_score(node, turn)
         else:
-            # ghost minimize
+            # ghost expecti max
             org = node[turn].raw_pos()
             moves = node[turn].alter_pos(self.wall, node[1:])
             scores = []
@@ -151,6 +155,7 @@ class Scheduler:
                 node[turn].act(move)
                 scores.append(self.expecti_max_score(node, k, begin, (turn+1) % len(node)))
             node[turn].act(org)
+            # return average score (expecti max) or return current state score
             return sum(scores) / len(scores) if len(scores)>0 else self.add_score(node, turn)
     
     def expecti_max_move(self, k, begin: int=0):
@@ -169,21 +174,26 @@ class Scheduler:
         else:
             moves = self.ghosts[begin-1].alter_moves(self.wall, self.ghosts)
         
-        
+        # available moves is empty
         if len(moves) == 0:
             return None
+        # setup actors
         sim_actors = [self.pacman, *self.ghosts]
+        # push current state to stack
         org = sim_actors[begin].raw_pos()
         scores = []
         # scores in each direction
         for move in moves:
             sim_actors[begin].act(move)
             scores.append(self.expecti_max_score(sim_actors, k, begin, begin))
+        # pop original state
         sim_actors[begin].act(org)
+        # set score
         if begin == 0:
             ms = max(scores)
         else:
-            ms = sum(scores) / len(scores)
+            # average score means ghost have the same opportunity to each direction
+            return random.choice(moves)
         best = [i for i in range(len(scores)) if scores[i] == ms]
         return random.choice([moves[i] for i in best])
         
@@ -193,10 +203,7 @@ class Scheduler:
         self.tick = tick
         result = []
         try:
-        # for i in [0]:
             while True:
-                # print(f'\rpos: [{self.pacman.position()}]', end='', flush=True)
-                # print(f'\rfoods: {len(self.foods)}', end='', flush=True)
                 # pacman expecti max move
                 move = self.expecti_max_move(k)
                 self.tick += 1
@@ -208,8 +215,8 @@ class Scheduler:
                     if len(self.foods) == 0:
                         board += PACMAN_WIN_SCORE
                         raise Exception("Pacman Win!")
+                # for each ghost, do move as below
                 for i, ghost in enumerate(self.ghosts):
-                    # move = self.minimax_move(k, i+1)
                     # ghost move randomly
                     moves = ghost.alter_moves(self.wall, self.ghosts)
                     move = None
@@ -240,6 +247,7 @@ def p6(k, seed, state):
     g = []
     f = []
     w = []
+    # initialize
     for i in range(n):
         for j in range(m):
             if state[i][j] == 'P':
@@ -253,6 +261,7 @@ def p6(k, seed, state):
             else:
                 g.append(GhostActor(state[i][j], i,j,n,m))
     assert(p is not None)
+    # order of taking action
     g.sort(key=lambda x: x.name)
     s = Scheduler(state, p, g, f, w)
     result.extend(s.process(tick, k))
