@@ -1,0 +1,9 @@
+python p6.py 1 2 10 0
+python p6.py 2 6 10 0
+python p6.py 3 10 10 0
+python p6.py 4 1 10 0
+python p6.py 5 4 10 0
+python p6.py 6 3 10 0
+python p6.py 7 3 10 0
+python p6.py 8 4 10 0
+python p6.py 9 3 10 0
