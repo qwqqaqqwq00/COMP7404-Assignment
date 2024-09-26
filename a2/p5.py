@@ -93,7 +93,7 @@ class Scheduler:
         return node[0].position() in [x.position() for x in node[1:]]
     
 
-    def add_score(self, node: List[GhostActor], turn=0):
+    def add_score(self, node: List[GhostActor], foods, turn=0):
         """minimax k state score evaluate function.
 
         Args:
@@ -109,14 +109,14 @@ class Scheduler:
         # too close to GHOST!!! pacman deserve punishment
         score = PACMAN_EATEN_SCORE if min(abs(i-u)+abs(j-v) for u, v in uvlist) < 2 else 0
         if turn == 0:
-            xylist = [list(map(int, f.split(','))) for f in self.foods]
+            xylist = [list(map(int, f.split(','))) for f in foods]
             fd = [abs(i-u)+abs(j-v) for u, v in xylist]
             fd = [v for v in fd if v < 2]
             # how many foods surround pacman
             score += EAT_FOOD_SCORE * len(fd)
         return score
 
-    def minimax_score(self, node: List[GhostActor], k: int, begin: int, turn: int, a: float=float('-inf'), b: float=float('inf')):
+    def minimax_score(self, node: List[GhostActor], foods: List[List[bool]], k: int, begin: int, turn: int, a: float=float('-inf'), b: float=float('inf')):
         """score calculate node in k moves
 
         Args:
@@ -130,7 +130,7 @@ class Scheduler:
         """
         # terminate
         if k == 0:
-            return self.add_score(node, turn)
+            return self.add_score(node, foods, turn)
 
         elif turn == begin:
             # pacman maximize
@@ -139,7 +139,17 @@ class Scheduler:
             score = float('-inf')
             for move in moves:
                 node[turn].act(move)
-                score = max(score, self.minimax_score(node, k-1, begin, (turn+1) % len(node), a, b))
+                if node[turn].position() == node[0].position():
+                    return PACMAN_EATEN_SCORE
+                score = 0
+                borrow = False
+                if f"{move[0]},{move[1]}" in foods:
+                    score += EAT_FOOD_SCORE
+                    foods.remove(f"{move[0]},{move[1]}")
+                    borrow = True
+                score += max(score, self.minimax_score(node, foods, k-1, begin, (turn+1) % len(node), a, b))
+                if borrow:
+                    foods.append(f"{move[0]},{move[1]}")
                 a = max(a, score)
                 if b <= a:
                     break
@@ -152,8 +162,12 @@ class Scheduler:
             score = float('inf')
             for move in moves:
                 node[turn].act(move)
-                score = min(score, self.minimax_score(node, k, begin, (turn+1) % len(node), a, b))
+                if node[turn].position() == node[0].position():
+                    return PACMAN_EATEN_SCORE
+                score = min(score, self.minimax_score(node, foods, k, begin, (turn+1) % len(node), a, b))
                 b = min(b, score)
+                if b <= a:
+                    break
             node[turn].act(org)
             return score
     
@@ -173,7 +187,8 @@ class Scheduler:
         # scores in each direction
         for move in moves:
             sim_actors[begin].act(move)
-            scores.append(self.minimax_score(sim_actors, k, begin, begin))
+            borrow_foods = copy.deepcopy(self.foods)
+            scores.append(self.minimax_score(sim_actors, borrow_foods, k, begin, begin))
         sim_actors[begin].act(org)
         if begin == 0:
             ms = max(scores)
@@ -188,7 +203,9 @@ class Scheduler:
         tick = tick
         result = []
         try:
+        # for i in [0]:
             while True:
+                print(f"\rfoods:{len(self.foods)}",end='')
                 move = self.minimax_move(k)
                 tick += 1
                 self.pacman.act(move, tick)
@@ -229,7 +246,7 @@ def p5(k, seed, state):
     for i in range(n):
         for j in range(m):
             if state[i][j] == 'P':
-                p = GhostActor("P", i, j, n, m)
+                p = Actor("P", i, j, n, m)
             elif state[i][j] == '.':
                 f.append(f"{i},{j}")
             elif state[i][j] == '%':
