@@ -1,5 +1,4 @@
-from itertools import product
-import math
+from functools import lru_cache
 import random
 import sys, parse
 from typing import List
@@ -24,7 +23,10 @@ class Actor:
             "W": [0, -1]
         }
     
-    def alter_moves(self, w: List[str], ghosts = None):
+    def __hash__(self) -> int:
+        return id(self)
+    
+    def alter_moves(self, w: set[str], ghosts = None):
         spaces = list(self.ad.keys())
         ret_space = []
         for space in spaces:
@@ -35,7 +37,7 @@ class Actor:
         
         return ret_space
     
-    def alter_pos(self, w: List[str], ghosts: List['Actor'] = None):
+    def alter_pos(self, w: set[str], ghosts: List['Actor'] = None):
         alter_moves = self.alter_moves(w, ghosts)
         alter_moves = [self.ad[m] for m in alter_moves]
         return [[self.i+u, self.j+v] for u, v in alter_moves]
@@ -69,21 +71,21 @@ class Actor:
 class GhostActor(Actor):
     def __init__(self, name, i, j, n, m):
         super().__init__(name, i, j, n, m)
-        
-    def alter_moves(self, w: List[str], ghosts: List['GhostActor']):
+    
+    def alter_moves(self, w: set[str], ghosts: List['GhostActor']):
         spaces = super().alter_moves(w, ghosts=ghosts)
         # collision with other ghosts
-        ghosts_pos = [g.position() for g in ghosts]
+        ghosts_pos = [g.raw_pos() for g in ghosts]
         ret_space = []
         for space in spaces:
             u, v = self.ad[space]
-            u, v = self.i+u, self.j+v
-            if f"{u},{v}" not in ghosts_pos:
+            uv = [self.i+u, self.j+v]
+            if uv not in ghosts_pos:
                 ret_space.append(space)
         return ret_space
 
 class Scheduler:
-    def __init__(self, state: List[List[str]], pacman: GhostActor, ghosts: List[GhostActor], foods: List[str], wall: List[str]) -> None:
+    def __init__(self, state: List[List[str]], pacman: GhostActor, ghosts: List[GhostActor], foods: set[str], wall: set[str]) -> None:
         self.state = state
         self.pacman = pacman
         self.ghosts = ghosts
@@ -92,10 +94,7 @@ class Scheduler:
         self.start = self.pacman.raw_pos()
         self.total_food = len(self.foods)
     
-    def collision(self, node: List[Actor]):
-        return node[0].position() in [x.position() for x in node[1:]]
-    
-    def add_score(self, node: List[GhostActor], turn=0):
+    def add_score(self):
         """expecti max k state score evaluate function.
 
         Args:
@@ -106,16 +105,17 @@ class Scheduler:
             float: the score value for expecti max
         """
         # it is a difficult task to design the score evalution function
-        i, j = node[0].raw_pos()
-        uvlist = [[n.i, n.j] for n in node[1:]]
+        i, j = self.pacman.raw_pos()
+        uvlist = [[n.i, n.j] for n in self.ghosts]
         # too close to GHOST!!! pacman deserve punishment
         score = PACMAN_EATEN_SCORE if min(abs(i-u)+abs(j-v) for u, v in uvlist) < 2 else 0
-        fd = min(abs(i-u)+abs(j-v) for u,v in self.foods) # fd moves to food
+        fd = min(abs(i-int(f.split(',')[0]))+abs(j-int(f.split(',')[1])) for f in self.foods) # fd moves to food
         score -= fd
-        score += EAT_FOOD_SCORE if node[0].raw_pos() in self.foods else 0#+[v for v in fd if v < 2])
+        # score += EAT_FOOD_SCORE if fd == 0 else -fd#+[v for v in fd if v < 2])
         return score
-
-    def expecti_max_score(self, node: List[GhostActor], k: int, begin: int, turn: int):
+    
+    @lru_cache(maxsize=None)
+    def expecti_max_score(self, k: int, turn: int):
         """score calculate node in k moves
 
         Args:
@@ -129,39 +129,41 @@ class Scheduler:
         """
         # terminate
         if k == 0:
-            return self.add_score(node, turn)
+            return self.add_score()
             # return 0
 
         elif turn == 0:
             # pacman maximize
             k -= 1
-            moves = node[turn].alter_pos(self.wall, node[1:])
+            moves = self.pacman.alter_pos(self.wall, self.ghosts)
             if len(moves) == 0:
-                return self.add_score(node, turn)
-            org = node[turn].raw_pos()
+                return self.add_score()
+            org = self.pacman.raw_pos()
             scores = []
             for move in moves:
-                node[turn].act(move)
-                if node[turn].raw_pos() in [n.raw_pos() for n in node[1:]]:
+                self.pacman.act(move)
+                if self.pacman.position() in [n.position() for n in self.ghosts]:
                     return PACMAN_EATEN_SCORE
-                scores.append(self.expecti_max_score(node, k, begin, (turn+1) % len(node)))
+                if self.pacman.position() in self.foods:
+                    return EAT_FOOD_SCORE
+                scores.append(self.expecti_max_score(k, (turn+1) % (len(self.ghosts)+1)))
             # reset moves
-            node[turn].act(org)
+            self.pacman.act(org)
             # select max score or score of current state
             return max(scores)
         else:
             # ghost expecti max
-            moves = node[turn].alter_pos(self.wall, node[1:])
+            moves = self.ghosts[turn-1].alter_pos(self.wall, self.ghosts)
             if len(moves) == 0:
-                return self.add_score(node, turn)
-            org = node[turn].raw_pos()
+                return self.add_score()
+            org = self.ghosts[turn-1].raw_pos()
             scores = []
             for move in moves:
-                node[turn].act(move)
-                if node[turn].raw_pos() == node[0].raw_pos():
+                self.ghosts[turn-1].act(move)
+                if self.ghosts[turn-1].position() == self.pacman.position():
                     return PACMAN_EATEN_SCORE
-                scores.append(self.expecti_max_score(node, k, begin, (turn+1) % len(node)))
-            node[turn].act(org)
+                scores.append(self.expecti_max_score(k, (turn+1) % (len(self.ghosts)+1)))
+            self.ghosts[turn-1].act(org)
             # return average score (expecti max) or return current state score
             return sum(scores) / len(scores)
     
@@ -178,23 +180,25 @@ class Scheduler:
         # start moving
         if begin == 0:
             moves = self.pacman.alter_moves(self.wall, self.ghosts)
+            p =self.pacman
         else:
             moves = self.ghosts[begin-1].alter_moves(self.wall, self.ghosts)
+            p = self.ghosts[begin-1]
         
         # available moves is empty
         if len(moves) == 0:
             return None
         # setup actors
-        sim_actors = [self.pacman, *self.ghosts]
+        # sim_actors = [self.pacman, *self.ghosts]
         # push current state to stack
-        org = sim_actors[begin].raw_pos()
+        org = p.raw_pos()
         scores = []
         # scores in each direction
         for move in moves:
-            sim_actors[begin].act(move)
-            scores.append(self.expecti_max_score(sim_actors, k, begin, begin))
+            p.act(move)
+            scores.append(self.expecti_max_score(k, begin))
         # pop original state
-        sim_actors[begin].act(org)
+        p.act(org)
         # set score
         if begin == 0:
             ms = max(scores)
@@ -210,6 +214,7 @@ class Scheduler:
         self.tick = tick
         result = []
         try:
+        # for i in [0]:
             while True:
                 # pacman expecti max move
                 # print(f'\rt:{self.tick}p:{self.pacman.position()} f:{len(self.foods)}',end='')
@@ -217,8 +222,8 @@ class Scheduler:
                 self.tick += 1
                 self.pacman.act(move, self.tick)
                 board += PACMAN_MOVING_SCORE
-                if self.pacman.raw_pos() in self.foods:
-                    self.foods.remove(self.pacman.raw_pos())
+                if self.pacman.position() in self.foods:
+                    self.foods.remove(self.pacman.position())
                     board += EAT_FOOD_SCORE
                     if len(self.foods) == 0:
                         board += PACMAN_WIN_SCORE
@@ -253,17 +258,17 @@ def p6(k, seed, state):
     n, m = len(state), len(state[0])
     p = None
     g = []
-    f = []
-    w = []
+    f = set()
+    w = set()
     # initialize
     for i in range(n):
         for j in range(m):
             if state[i][j] == 'P':
                 p = Actor("P", i, j, n, m)
             elif state[i][j] == '.':
-                f.append([i,j])
+                f.add(f"{i},{j}")
             elif state[i][j] == '%':
-                w.append(f"{i},{j}")
+                w.add(f"{i},{j}")
             elif state[i][j] == ' ':
                 continue
             else:
