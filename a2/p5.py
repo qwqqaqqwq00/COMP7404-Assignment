@@ -1,3 +1,4 @@
+from functools import lru_cache
 import math
 import random
 import sys, parse
@@ -87,13 +88,9 @@ class Scheduler:
         self.ghosts = ghosts
         self.foods = foods
         self.wall = wall
-        self.start = self.pacman.raw_pos()
-    
-    def collision(self, node: List[Actor]):
-        return node[0].position() in [x.position() for x in node[1:]]
-    
+        self.start = self.pacman.raw_pos()    
 
-    def add_score(self, node: List[GhostActor]):
+    def add_score(self):
         """minimax k state score evaluate function.
 
         Args:
@@ -104,18 +101,22 @@ class Scheduler:
             float: the score value for minimax
         """
         # it is a difficult task to design the score evalution function
-        i, j = node[0].raw_pos()
-        uvlist = [[n.i, n.j] for n in node[1:]]
+        i, j = self.pacman.raw_pos()
+        uvlist = [[n.i, n.j] for n in self.ghosts]
         # too close to GHOST!!! pacman deserve punishment
         score = PACMAN_EATEN_SCORE if min(abs(i-u)+abs(j-v) for u, v in uvlist) < 2 else 0
-        xylist = [list(map(int, f.split(','))) for f in self.foods]
-        fd = [abs(i-u)+abs(j-v) for u, v in xylist]
-        fd = [v for v in fd if v < 2]
+        # xylist = [list(map(int, f.split(','))) for f in self.foods]
+        # fd = [abs(i-u)+abs(j-v) for u, v in xylist]
+        # fd = [v for v in fd if v < 2]
+        fd = min(abs(i-int(f.split(',')[0]))+abs(j-int(f.split(',')[1])) for f in self.foods)
+        # score -= fd
+        score += EAT_FOOD_SCORE if fd == 0 else -fd
         # how many foods surround pacman
-        score += EAT_FOOD_SCORE * len(fd)
+        # score += EAT_FOOD_SCORE * len(fd)
         return score
 
-    def minimax_score(self, node: List[GhostActor], k: int, begin: int, turn: int, a: float=float('-inf'), b: float=float('inf')):
+    @lru_cache(maxsize=None)
+    def minimax_score(self, k: int, begin: int, turn: int, a: float=float('-inf'), b: float=float('inf')):
         """score calculate node in k moves
 
         Args:
@@ -129,71 +130,73 @@ class Scheduler:
         """
         # terminate
         if k <= 0:
-            return self.add_score(node, turn)
+            return self.add_score()
 
         elif turn == 0:
             # pacman maximize
             k -= 1
             score = float('-inf')
-            moves = node[turn].alter_pos(self.wall, node[1:])
+            moves = self.pacman.alter_pos(self.wall, self.ghosts)
             if len(moves) == 0:
                 return score
-            org = node[turn].raw_pos()
+            org = self.pacman.raw_pos()
             for move in moves:
-                node[turn].act(move)
-                if node[turn].position() in [n.position() for n in node[1:]]:
+                self.pacman.act(move)
+                if self.pacman.position() in [n.position() for n in self.ghosts]:
                     return PACMAN_EATEN_SCORE
-                score = 0
-                borrow = False
-                if f"{move[0]},{move[1]}" in self.foods:
-                    if len(self.foods) == 1:
-                        return PACMAN_WIN_SCORE
-                    self.foods.remove(f"{move[0]},{move[1]}")
-                    borrow = True
-                score += max(score, self.minimax_score(node, k, begin, (turn+1) % len(node), a, b))
-                if borrow:
-                    self.foods.append(f"{move[0]},{move[1]}")
+                # score = 0
+                # borrow = False
+                # if self.pacman.position() in self.foods:
+                    # return EAT_FOOD_SCORE
+                    # if len(self.foods) == 1:
+                    #     return PACMAN_WIN_SCORE
+                    # self.foods.remove(f"{move[0]},{move[1]}")
+                    # borrow = True
+                score += max(score, self.minimax_score(k, begin, (turn+1) % (len(self.ghosts)+1), a, b))
+                # if borrow:
+                    # self.foods.append(f"{move[0]},{move[1]}")
                 a = max(a, score)
                 if b <= a:
                     break
-            node[turn].act(org)
+            self.pacman.act(org)
             return score
         else:
             # ghost minimize
             score = float('inf')
-            moves = node[turn].alter_pos(self.wall, node[1:])
+            moves = self.ghosts[turn-1].alter_pos(self.wall, self.ghosts)
             if len(moves) == 0:
                 return score
-            org = node[turn].raw_pos()
+            org = self.ghosts[turn-1].raw_pos()
             for move in moves:
-                node[turn].act(move)
-                if node[turn].position() == node[0].position():
+                self.ghosts[turn-1].act(move)
+                if self.ghosts[turn-1].position() == self.pacman.position():
                     return PACMAN_EATEN_SCORE
-                score = min(score, self.minimax_score(node, k, begin, (turn+1) % len(node), a, b))
+                score = min(score, self.minimax_score(k, begin, (turn+1) % (len(self.ghosts)+1), a, b))
                 b = min(b, score)
                 if b <= a:
                     break
-            node[turn].act(org)
+            self.ghosts[turn-1].act(org)
             return score
     
     def minimax_move(self, k, begin: int=0):
         # start moving
         if begin == 0:
             moves = self.pacman.alter_moves(self.wall, self.ghosts)
+            p = self.pacman
         else:
             moves = self.ghosts[begin-1].alter_moves(self.wall, self.ghosts)
-        
+            p = self.ghosts[begin-1]
         
         if len(moves) == 0:
             return None
-        sim_actors = [self.pacman, *self.ghosts]
-        org = sim_actors[begin].raw_pos()
+        # sim_actors = [self.pacman, *self.ghosts]
+        org = p.raw_pos()
         scores = []
         # scores in each direction
         for move in moves:
-            sim_actors[begin].act(move)
-            scores.append(self.minimax_score(sim_actors, k, begin, begin))
-        sim_actors[begin].act(org)
+            p.act(move)
+            scores.append(self.minimax_score(k, begin, begin))
+        p.act(org)
         if begin == 0:
             ms = max(scores)
         else:
