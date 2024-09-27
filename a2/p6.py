@@ -107,11 +107,11 @@ class Scheduler:
         # it is a difficult task to design the score evalution function
         i, j = self.pacman.raw_pos()
         uvlist = [[n.i, n.j] for n in self.ghosts]
+        dist = min(abs(i-u)+abs(j-v) for u, v in uvlist)
         # too close to GHOST!!! pacman deserve punishment
-        score = PACMAN_EATEN_SCORE if min(abs(i-u)+abs(j-v) for u, v in uvlist) < 2 else 0
+        score = PACMAN_EATEN_SCORE if dist < 2 else dist
         fd = min(abs(i-int(f.split(',')[0]))+abs(j-int(f.split(',')[1])) for f in self.foods) # fd moves to food
         score -= fd
-        # score += EAT_FOOD_SCORE if fd == 0 else -fd#+[v for v in fd if v < 2])
         return score
     
     @lru_cache(maxsize=None)

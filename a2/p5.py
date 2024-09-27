@@ -103,16 +103,12 @@ class Scheduler:
         # it is a difficult task to design the score evalution function
         i, j = self.pacman.raw_pos()
         uvlist = [[n.i, n.j] for n in self.ghosts]
-        # too close to GHOST!!! pacman deserve punishment
-        score = PACMAN_EATEN_SCORE if min(abs(i-u)+abs(j-v) for u, v in uvlist) < 2 else 0
-        # xylist = [list(map(int, f.split(','))) for f in self.foods]
-        # fd = [abs(i-u)+abs(j-v) for u, v in xylist]
-        # fd = [v for v in fd if v < 2]
+        # only when pacman is too close to ghost, it scared
+        dist = min(abs(i-u)+abs(j-v) for u, v in uvlist)
+        score = PACMAN_EATEN_SCORE if dist < 2 else dist
         fd = min(abs(i-int(f.split(',')[0]))+abs(j-int(f.split(',')[1])) for f in self.foods)
-        # score -= fd
+        # only if pacman eat food, it get score, or it just pay to walk
         score += EAT_FOOD_SCORE if fd == 0 else -fd
-        # how many foods surround pacman
-        # score += EAT_FOOD_SCORE * len(fd)
         return score
 
     @lru_cache(maxsize=None)
@@ -137,24 +133,16 @@ class Scheduler:
             k -= 1
             score = float('-inf')
             moves = self.pacman.alter_pos(self.wall, self.ghosts)
+            # skip do action
             if len(moves) == 0:
                 return score
             org = self.pacman.raw_pos()
             for move in moves:
                 self.pacman.act(move)
+                # failed on pacman was eaten
                 if self.pacman.position() in [n.position() for n in self.ghosts]:
                     return PACMAN_EATEN_SCORE
-                # score = 0
-                # borrow = False
-                # if self.pacman.position() in self.foods:
-                    # return EAT_FOOD_SCORE
-                    # if len(self.foods) == 1:
-                    #     return PACMAN_WIN_SCORE
-                    # self.foods.remove(f"{move[0]},{move[1]}")
-                    # borrow = True
                 score += max(score, self.minimax_score(k, begin, (turn+1) % (len(self.ghosts)+1), a, b))
-                # if borrow:
-                    # self.foods.append(f"{move[0]},{move[1]}")
                 a = max(a, score)
                 if b <= a:
                     break
@@ -164,6 +152,7 @@ class Scheduler:
             # ghost minimize
             score = float('inf')
             moves = self.ghosts[turn-1].alter_pos(self.wall, self.ghosts)
+            # skip do action
             if len(moves) == 0:
                 return score
             org = self.ghosts[turn-1].raw_pos()
@@ -208,12 +197,9 @@ class Scheduler:
     def process(self, tick=0, k=10):
         result = []
         try:
-        # for i in [0]:
             while True:
                 move = self.minimax_move(k)
                 self.pacman.act(move, tick)
-                if self.pacman.position() in [g.position() for g in self.ghosts]:
-                    raise Exception("Ghost Win!")
                 if self.pacman.position() in self.foods:
                     self.foods.remove(self.pacman.position())
                     if len(self.foods) == 0:
