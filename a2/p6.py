@@ -90,6 +90,7 @@ class Scheduler:
         self.foods = foods
         self.wall = wall
         self.start = self.pacman.raw_pos()
+        self.total_food = len(self.foods)
     
     def collision(self, node: List[Actor]):
         return node[0].position() in [x.position() for x in node[1:]]
@@ -109,14 +110,9 @@ class Scheduler:
         uvlist = [[n.i, n.j] for n in node[1:]]
         # too close to GHOST!!! pacman deserve punishment
         score = PACMAN_EATEN_SCORE if min(abs(i-u)+abs(j-v) for u, v in uvlist) < 2 else 0
-        xylist = [list(map(int, f.split(','))) for f in self.foods]
-        fd = [abs(i-u)+abs(j-v) for u, v in xylist]
-        # print(f'\rf:{len([v for v in fd if v < 2])}',end='')
-        # score += sum([EAT_FOOD_SCORE // (f+1) for f in fd]) / len(self.foods)
-        score += EAT_FOOD_SCORE / (min(fd)+1)
-        # fd = [v for v in fd if v < 2]
-        # how many foods surround pacman
-        # score += EAT_FOOD_SCORE // (min(fd)+1) + EAT_FOOD_SCORE * len([v for v in fd if v < 2])
+        fd = min(abs(i-u)+abs(j-v) for u,v in self.foods) # fd moves to food
+        score -= fd
+        score += EAT_FOOD_SCORE if node[0].raw_pos() in self.foods else 0#+[v for v in fd if v < 2])
         return score
 
     def expecti_max_score(self, node: List[GhostActor], k: int, begin: int, turn: int):
@@ -138,6 +134,7 @@ class Scheduler:
 
         elif turn == 0:
             # pacman maximize
+            k -= 1
             moves = node[turn].alter_pos(self.wall, node[1:])
             if len(moves) == 0:
                 return self.add_score(node, turn)
@@ -145,22 +142,13 @@ class Scheduler:
             scores = []
             for move in moves:
                 node[turn].act(move)
-                if node[turn].position() in [n.position() for n in node[1:]]:
+                if node[turn].raw_pos() in [n.raw_pos() for n in node[1:]]:
                     return PACMAN_EATEN_SCORE
-                borrow = False
-                if f"{move[0]},{move[1]}" in self.foods:
-                    if len(self.foods) == 1:
-                        return PACMAN_WIN_SCORE
-                    self.foods.remove(f"{move[0]},{move[1]}")
-                    borrow = True
-                # this one executed, then next one execute
-                scores.append(self.expecti_max_score(node, k-1, begin, (turn+1) % len(node)))
-                if borrow:
-                    self.foods.append(f"{move[0]},{move[1]}")
+                scores.append(self.expecti_max_score(node, k, begin, (turn+1) % len(node)))
             # reset moves
             node[turn].act(org)
             # select max score or score of current state
-            return max(scores) if len(scores)>0 else self.add_score(node, turn)
+            return max(scores)
         else:
             # ghost expecti max
             moves = node[turn].alter_pos(self.wall, node[1:])
@@ -170,12 +158,12 @@ class Scheduler:
             scores = []
             for move in moves:
                 node[turn].act(move)
-                if node[turn].position() == node[0].position():
+                if node[turn].raw_pos() == node[0].raw_pos():
                     return PACMAN_EATEN_SCORE
                 scores.append(self.expecti_max_score(node, k, begin, (turn+1) % len(node)))
             node[turn].act(org)
             # return average score (expecti max) or return current state score
-            return sum(scores) / len(scores) if len(scores)>0 else self.add_score(node, turn)
+            return sum(scores) / len(scores)
     
     def expecti_max_move(self, k, begin: int=0):
         """expecti max move, return a move for the actor within k depth
@@ -224,13 +212,13 @@ class Scheduler:
         try:
             while True:
                 # pacman expecti max move
-                # print(f'\rt:{tick}p:{self.pacman.position()} f:{len(self.foods)}',end='')
+                # print(f'\rt:{self.tick}p:{self.pacman.position()} f:{len(self.foods)}',end='')
                 move = self.expecti_max_move(k)
                 self.tick += 1
                 self.pacman.act(move, self.tick)
                 board += PACMAN_MOVING_SCORE
-                if self.pacman.position() in self.foods:
-                    self.foods.remove(self.pacman.position())
+                if self.pacman.raw_pos() in self.foods:
+                    self.foods.remove(self.pacman.raw_pos())
                     board += EAT_FOOD_SCORE
                     if len(self.foods) == 0:
                         board += PACMAN_WIN_SCORE
@@ -273,7 +261,7 @@ def p6(k, seed, state):
             if state[i][j] == 'P':
                 p = Actor("P", i, j, n, m)
             elif state[i][j] == '.':
-                f.append(f"{i},{j}")
+                f.append([i,j])
             elif state[i][j] == '%':
                 w.append(f"{i},{j}")
             elif state[i][j] == ' ':
