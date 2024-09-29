@@ -2,3 +2,6 @@ a2/__pycache__/*
 a1/a1/__pycache__/*
 a1/a1/.vscode
 a2/.vscode
+a2/*.zip
+a1/a1/*.zip
+group/*.csv
