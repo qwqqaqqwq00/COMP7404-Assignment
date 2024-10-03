@@ -1,3 +1,4 @@
+from collections import deque
 from functools import lru_cache
 import random
 import sys, parse
@@ -8,9 +9,6 @@ EAT_FOOD_SCORE = 10
 PACMAN_EATEN_SCORE = -500
 PACMAN_WIN_SCORE = 500
 PACMAN_MOVING_SCORE = -1
-BEST_PERFORM = {
-    
-}
 
 class Actor:
     def __init__(self, name, i, j, n, m):
@@ -23,7 +21,8 @@ class Actor:
             "E": [0, 1],
             "N": [-1, 0],
             "S": [1, 0],
-            "W": [0, -1]
+            "W": [0, -1],
+            "I": [0, 0]
         }
     
     def alter_moves(self, w: List[str]):
@@ -34,14 +33,16 @@ class Actor:
             u, v = self.i+u, self.j+v
             if 0<=u<self.n and 0<=v<self.m and f"{u},{v}" not in w:
                 ret_space.append(space)
-        
         return ret_space
     
     def act(self, move, tick):
-        if move:
+        if isinstance(move, str):
             u, v = self.ad[move]
             self.i+=u
             self.j+=v
+        elif isinstance(move, list):
+            self.i = move[0]
+            self.j = move[1]
         else:
             move = ""
         return f"{tick}: {self.name} moving {move}\n"
@@ -59,6 +60,7 @@ class GhostActor(Actor):
     def alter_moves(self, w: List[str], ghosts: List['GhostActor']):
         spaces = super().alter_moves(w)
         ghosts_pos = [g.position() for g in ghosts]
+        # ret_space = ["I"] * 10
         ret_space = []
         for space in spaces:
             u, v = self.ad[space]
@@ -75,31 +77,43 @@ class Scheduler:
         self.ghosts = ghosts
         self.foods = foods
         self.wall = wall
-        
-    def figure(self, before_position: str, after_position: str, flag: str):
-        i, j = list(map(int, before_position.split(",")))
-        u, v = list(map(int, after_position.split(",")))
-        self.state[i][j] = ' ' if before_position not in self.foods else '.'
-        self.state[u][v] = flag
-        return ["".join(x)+"\n" for x in self.state]
+        self.q = deque()
+        self.vis = set()
+    
+    @lru_cache(maxsize=6)
+    def q_append(self, u, v, d):
+        for a, b in [[0, 1], [0, -1], [1, 0], [-1, 0]]:
+            a,b = u+a,v+b
+            if f"{a},{b}" not in self.vis and f"{a},{b}" not in self.wall:
+                self.q.append([a,b, d+1])
+    
+    def bfs(self, i, j):
+        self.q.clear()
+        self.vis.clear()
+        self.q.append([i, j, 0])
+        closest_ghost = 0
+        gs = set(g.position() for g in self.ghosts)
+        while len(self.q)>0:
+            u, v, d = self.q.popleft()
+            self.vis.add(f"{u},{v}")
+            if d > 5:break
+            if f"{u},{v}" in gs:
+                closest_ghost = d
+                break
+            self.q_append(u, v, d)
+        return closest_ghost 
     
     def manhattan_score(self, move):
-        i, j = self.pacman.i, self.pacman.j
-        i, j = i + self.pacman.ad[move][0], j + self.pacman.ad[move][1]
-        closest_ghost = min([abs(x.i-i) + abs(x.j-j) for x in self.ghosts]) 
-        closest_ghost = PACMAN_EATEN_SCORE if closest_ghost < 2 else 0       
-        closest_food = [abs(int(f.split(',')[0])-i)+abs(int(f.split(',')[1])-j) for f in self.foods]
-        # closest_food = len([int(x<2) for x in closest_food])
-        # closest_food = -min(closest_food) 
-        closest_food = 0
-        # higher is better
-        return closest_food + closest_ghost
+        org = [self.pacman.i, self.pacman.j]
+        i, j = org[0]+self.pacman.ad[move][0], org[1]+self.pacman.ad[move][1]
+        return self.bfs(i, j)
     
-    @lru_cache(maxsize=None)
-    def argmax(self, moves):
+    def argmax(self):
+        moves = self.pacman.alter_moves(self.wall)
+        # print(len(moves))
         scores = [self.manhattan_score(move) for move in moves]
-        idx = scores.index(max(scores))
-        ret_move = moves[idx]
+        val = max(scores)
+        ret_move = random.choice([moves[i] for i in range(len(moves)) if scores[i]==val])
         return ret_move
     
     def process(self, tick=0):
@@ -109,39 +123,34 @@ class Scheduler:
         try:
         # for i in [0]:
             while True:
-                move = self.argmax(self.pacman.alter_moves(self.wall))
-                before = self.pacman.position()
-                tick += 1
+                tick+=1
+                move = self.argmax()
                 result.append(self.pacman.act(move, tick))
+                # print(self.pacman.position())
+                # if tick>20:
+                    # exit(0)
                 board += PACMAN_MOVING_SCORE
                 ghost_pos = [w.position() for w in self.ghosts]
                 current = self.pacman.position()
                 if current in ghost_pos:
-                    u, v = list(map(int, current.split(',')))
-                    result.extend(self.figure(before, current, self.state[u][v]))
                     board += PACMAN_EATEN_SCORE
                     raise Exception("Bad terminate")
-                result.extend(self.figure(before, current, self.pacman.name))
                 if self.pacman.position() in self.foods:
                     self.foods.remove(self.pacman.position())
                     board += EAT_FOOD_SCORE
                     if len(self.foods) == 0:
                         board += PACMAN_WIN_SCORE
                         raise Exception("Pacman Win!")
-                result.append(f"score: {board}\n")
                 for ghost in self.ghosts:
+                    # moves = ghost.alter_moves(self.wall)
                     moves = ghost.alter_moves(self.wall, self.ghosts)
                     move = None
                     if len(moves) > 0:
                         move = random.choice(moves)
-                    before = ghost.position()
-                    tick += 1
                     result.append(ghost.act(move, tick))
-                    result.extend(self.figure(before, ghost.position(), ghost.name))
                     if ghost.position() == self.pacman.position():
                         board += PACMAN_EATEN_SCORE
                         raise Exception("Bad terminate")
-                    result.append(f"score: {board}\n")
         except Exception as e:
             # print(e)
             # bad terminate
@@ -157,7 +166,7 @@ class Scheduler:
         
 
 def p4(seed, state):
-    random.seed(seed)
+    # random.seed(seed)
     tick = 0
     result = [f"seed: {seed}\n", f"{tick}\n"]
     result.extend(["".join(x)+"\n" for x in state])
@@ -204,20 +213,13 @@ if __name__ == "__main__":
     print('verbose:',verbose)
     start = time.time()
     win_count = 0
-    seed = 0
-    while True:
-        problem['seed'] = seed
-        for i in range(num_trials):
-            solution, winner = better_play_multiple_ghosts(copy.deepcopy(problem))
-            if winner == 'Pacman':
-                win_count += 1
-            if verbose:
-                print(solution)
-        win_p = win_count/num_trials * 100
-        end = time.time()
-        print('time: ',end - start)
-        print('win %',win_p)
-        if win_count>0:
-            print(seed)
-            break
-        seed+=1
+    for i in range(num_trials):
+        solution, winner = better_play_multiple_ghosts(copy.deepcopy(problem))
+        if winner == 'Pacman':
+            win_count += 1
+        if verbose:
+            print(solution)
+    win_p = win_count/num_trials * 100
+    end = time.time()
+    print('time: ',end - start)
+    print('win %',win_p)
