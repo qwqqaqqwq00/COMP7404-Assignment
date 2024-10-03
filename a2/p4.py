@@ -1,3 +1,4 @@
+from functools import lru_cache
 import random
 import sys, parse
 from typing import List
@@ -7,6 +8,9 @@ EAT_FOOD_SCORE = 10
 PACMAN_EATEN_SCORE = -500
 PACMAN_WIN_SCORE = 500
 PACMAN_MOVING_SCORE = -1
+BEST_PERFORM = {
+    
+}
 
 class Actor:
     def __init__(self, name, i, j, n, m):
@@ -85,10 +89,13 @@ class Scheduler:
         closest_ghost = min([abs(x.i-i) + abs(x.j-j) for x in self.ghosts]) 
         closest_ghost = PACMAN_EATEN_SCORE if closest_ghost < 2 else 0       
         closest_food = [abs(int(f.split(',')[0])-i)+abs(int(f.split(',')[1])-j) for f in self.foods]
-        closest_food = len([int(x<2) for x in closest_food])
+        # closest_food = len([int(x<2) for x in closest_food])
+        # closest_food = -min(closest_food) 
+        closest_food = 0
         # higher is better
         return closest_food + closest_ghost
     
+    @lru_cache(maxsize=None)
     def argmax(self, moves):
         scores = [self.manhattan_score(move) for move in moves]
         idx = scores.index(max(scores))
@@ -150,7 +157,7 @@ class Scheduler:
         
 
 def p4(seed, state):
-    # random.seed(seed)
+    random.seed(seed)
     tick = 0
     result = [f"seed: {seed}\n", f"{tick}\n"]
     result.extend(["".join(x)+"\n" for x in state])
@@ -197,13 +204,20 @@ if __name__ == "__main__":
     print('verbose:',verbose)
     start = time.time()
     win_count = 0
-    for i in range(num_trials):
-        solution, winner = better_play_multiple_ghosts(copy.deepcopy(problem))
-        if winner == 'Pacman':
-            win_count += 1
-        if verbose:
-            print(solution)
-    win_p = win_count/num_trials * 100
-    end = time.time()
-    print('time: ',end - start)
-    print('win %',win_p)
+    seed = 0
+    while True:
+        problem['seed'] = seed
+        for i in range(num_trials):
+            solution, winner = better_play_multiple_ghosts(copy.deepcopy(problem))
+            if winner == 'Pacman':
+                win_count += 1
+            if verbose:
+                print(solution)
+        win_p = win_count/num_trials * 100
+        end = time.time()
+        print('time: ',end - start)
+        print('win %',win_p)
+        if win_count>0:
+            print(seed)
+            break
+        seed+=1

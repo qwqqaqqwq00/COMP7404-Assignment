@@ -5,5 +5,5 @@ python p5.py 4 2 1 0
 python p5.py 5 5 1 0
 python p5.py 6 5 1 0
 python p5.py 7 4 1 0
-python p5.py 8 8 1 0
-python p5.py 9 5 1 0
+python p5.py 8 5 1 0
+python p5.py 9 4 1 0

@@ -1,0 +1,9 @@
+python p4.py 1 3 1 0
+python p4.py 2 8 1 0
+python p4.py 3 100 1 0
+python p4.py 4 3 1 0
+python p4.py 5 6 1 0
+python p4.py 6 5 1 0
+python p4.py 7 4 1 0
+python p4.py 8 8 1 0
+python p4.py 9 5 1 0

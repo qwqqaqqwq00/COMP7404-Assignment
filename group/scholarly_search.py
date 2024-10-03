@@ -2,10 +2,16 @@ import json
 import time
 import pandas as pd
 from scholarly import scholarly
+from scholarly import ProxyGenerator
 import tqdm
 
-df = pd.read_csv('group/nips2023_papers.csv')
-import scholarly as sch
+# pg = ProxyGenerator()
+# pg.FreeProxies()
+# pg.SingleProxy(http="http://localhost:10809?sslVerify=false", https="https://localhost:10809?sslVerify=false")
+# scholarly.use_proxy(pg)
+
+df = pd.read_csv('new_nips2023_papers.csv')
+# import scholarly as sch
 scholarly.set_retries(10)
 scholarly.set_timeout(30)
 pbar = tqdm.tqdm(total=len(df))
@@ -30,7 +36,9 @@ def get_author_info(title, authors):
         first_author_affiliation = first_author_info['affiliation']
         first_author_email = first_author_info['email_domain']
         return citation_count, first_author_cited, first_author_affiliation, first_author_email, first_author_interest
-    except Exception:
+    except Exception as e:
+        with open('errlog.txt', 'a') as f:
+            f.write(str(e))
         return 0, 0, "", "", []
 
 df['paperCites'] = 0
@@ -40,6 +48,8 @@ df['emailDomain'] = ""
 df['interests'] = ""
 for idx in range(len(df)):
     pbar.update(1)
+    if idx > 0 and idx % 10 == 0:
+        time.sleep(300)
     try:
         title = df.loc[idx, 'title']
         authors = df.loc[idx, 'authors']
@@ -53,5 +63,5 @@ for idx in range(len(df)):
     df.loc[idx, 'affiliation'] = a
     df.loc[idx, 'emailDomain'] = e
     df.loc[idx, 'interests'] = ''.join(i)
-    df.to_csv('group/new_nips2023_papers.csv')
+    df.to_csv('new_nips2023_papers.csv')
 pbar.close()
