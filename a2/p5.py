@@ -1,5 +1,5 @@
 '''
-able to pass all sample test case in 30s-250s on AMD R9-7940HX
+able to pass all sample test case in 11s-242s on AMD R9-7940HX
 '''
 from collections import deque
 from functools import lru_cache
