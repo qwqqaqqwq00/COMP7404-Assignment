@@ -1,3 +1,4 @@
+from collections import deque
 from functools import lru_cache
 import random
 import sys, parse
@@ -32,7 +33,8 @@ class Actor:
             "E": [0, 1],
             "N": [-1, 0],
             "S": [1, 0],
-            "W": [0, -1]
+            "W": [0, -1],
+            "I": [0, 0]
         }
     
     def __hash__(self) -> int:
@@ -105,6 +107,34 @@ class Scheduler:
         self.wall = wall
         self.start = self.pacman.raw_pos()
         self.total_food = len(self.foods)
+        self.q = deque()
+        self.vis = set()
+        
+    @lru_cache(maxsize=16)
+    def q_append(self, u, v, d):
+        for a, b in [[0, 1], [0, -1], [1, 0], [-1, 0]]:
+            a,b = u+a,v+b
+            if f"{a},{b}" not in self.vis and f"{a},{b}" not in self.wall:
+                self.q.append([a,b, d+1])
+    
+    def bfs(self, i, j):
+        self.q.clear()
+        self.vis.clear()
+        self.q.append([i, j, 0])
+        closest_ghost = 0
+        gs = set(g.position() for g in self.ghosts)
+        food_score = 0
+        while len(self.q)>0:
+            u, v, d = self.q.popleft()
+            self.vis.add(f"{u},{v}")
+            if d > 5:break
+            if f"{u},{v}" in gs:
+                closest_ghost = d * 50
+                break
+            if f"{u},{v}" in self.foods:
+                food_score += -d
+            self.q_append(u, v, d)
+        return closest_ghost + food_score
     
     def add_score(self):
         """expecti max k state score evaluate function.
@@ -118,27 +148,12 @@ class Scheduler:
         """
         # it is a difficult task to design the score evalution function
         i, j = self.pacman.raw_pos()
-        uvlist = [[n.i, n.j] for n in self.ghosts]
-        dist = min(abs(i-u)+abs(j-v) for u, v in uvlist)
-        # too close to GHOST!!! pacman deserve punishment
-        score = PACMAN_EATEN_SCORE if dist < 2 else dist
-        fd = min(abs(i-int(f.split(',')[0]))+abs(j-int(f.split(',')[1])) for f in self.foods) # fd moves to food
-        score -= fd
-        return score
+        return self.bfs(i, j)
     
-    @lru_cache(maxsize=None)
-    def expecti_max_score(self, k: int, turn: int):
-        """score calculate node in k moves
-
-        Args:
-            node (List[GhostActor]): list of actor
-            k (int): k depth
-            begin (int): entry actor
-            turn (int): who is current actor
-
-        Returns:
-            float: expecti max score
-        """
+    @lru_cache(maxsize=32)
+    def expectimax_score(self, k: int, turn: int):
+        # expectimax tree
+        
         # terminate
         if k == 0:
             return self.add_score()
@@ -158,7 +173,7 @@ class Scheduler:
                     return PACMAN_EATEN_SCORE
                 if self.pacman.position() in self.foods:
                     return EAT_FOOD_SCORE
-                scores.append(self.expecti_max_score(k, (turn+1) % (len(self.ghosts)+1)))
+                scores.append(self.expectimax_score(k, (turn+1) % (len(self.ghosts)+1)))
             # reset moves
             self.pacman.act(org)
             # select max score or score of current state
@@ -174,21 +189,13 @@ class Scheduler:
                 self.ghosts[turn-1].act(move)
                 if self.ghosts[turn-1].position() == self.pacman.position():
                     return PACMAN_EATEN_SCORE
-                scores.append(self.expecti_max_score(k, (turn+1) % (len(self.ghosts)+1)))
+                scores.append(self.expectimax_score(k, (turn+1) % (len(self.ghosts)+1)))
             self.ghosts[turn-1].act(org)
             # return average score (expecti max) or return current state score
             return sum(scores) / len(scores)
     
-    def expecti_max_move(self, k, begin: int=0):
-        """expecti max move, return a move for the actor within k depth
-
-        Args:
-            k (_type_): k depth
-            begin (int, optional): entry actor. Defaults to 0.
-
-        Returns:
-            str: move direction
-        """
+    def expectimax_move(self, k, begin: int=0):
+        # expectimax tree root
         # start moving
         if begin == 0:
             moves = self.pacman.alter_moves(self.wall, self.ghosts)
@@ -208,7 +215,7 @@ class Scheduler:
         # scores in each direction
         for move in moves:
             p.act(move)
-            scores.append(self.expecti_max_score(k, begin))
+            scores.append(self.expectimax_score(k, begin))
         # pop original state
         p.act(org)
         # set score
@@ -230,7 +237,7 @@ class Scheduler:
             while True:
                 # pacman expecti max move
                 # print(f'\rt:{self.tick}p:{self.pacman.position()} f:{len(self.foods)}',end='')
-                move = self.expecti_max_move(k)
+                move = self.expectimax_move(k)
                 self.tick += 1
                 self.pacman.act(move, self.tick)
                 board += PACMAN_MOVING_SCORE
@@ -315,10 +322,7 @@ if __name__ == "__main__":
     print('k:',k)
     print('num_trials:',num_trials)
     print('verbose:',verbose)
-    problem['seed'] = BEST_PERFORM[test_case_id]
-    # seed = 0
-    # while True:
-    # problem['seed'] = -1
+    # problem['seed'] = BEST_PERFORM[test_case_id]
     start = time.time()
     win_count = 0
     for i in range(num_trials):
@@ -331,7 +335,3 @@ if __name__ == "__main__":
     end = time.time()
     print('time: ',end - start)
     print('win %',win_p)
-        # if win_count>0:
-        #     print(seed)
-        #     break
-        # seed+=1

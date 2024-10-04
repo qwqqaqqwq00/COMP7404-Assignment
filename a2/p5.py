@@ -121,20 +121,20 @@ class Scheduler:
         self.q.append([i, j, 0])
         closest_ghost = 0
         gs = set(g.position() for g in self.ghosts)
-        fd = self.foods
+        fd = 0
         while len(self.q)>0:
             u, v, d = self.q.popleft()
             self.vis.add(f"{u},{v}")
             if d > 3:break
             if f"{u},{v}" in gs:
-                closest_ghost = d+1
+                closest_ghost = d * 50
                 break
             # add food score
             # food score = eat food - walk cost
-            if f"{u},{v}" in fd:
-                closest_ghost += EAT_FOOD_SCORE
+            if f"{u},{v}" in self.foods:
+                fd += -d
             self.q_append(u, v, d)
-        return closest_ghost 
+        return closest_ghost + fd
 
     # @lru_cache(maxsize=8)
     def add_score(self, i, j):
@@ -150,7 +150,7 @@ class Scheduler:
         # it is a difficult task to design the score evalution function
         return self.bfs(i, j)
 
-    # @lru_cache(maxsize=4)
+    @lru_cache(maxsize=32)
     def minimax_score(self, k: int, begin: int, turn: int, a: float=float('-inf'), b: float=float('inf')):
         # minimax tree
         
@@ -253,7 +253,7 @@ class Scheduler:
                     if ghost.position() == self.pacman.position():
                         raise Exception("Ghost Win!")
         except Exception as e:
-            print(e)
+            # print(e)
             # bad terminate
             if len(self.foods)>0:
                 result.append("WIN: Ghost")
