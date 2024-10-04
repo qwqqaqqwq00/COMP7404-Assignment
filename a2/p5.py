@@ -1,3 +1,7 @@
+'''
+able to pass all sample test case in 30s-250s on AMD R9-7940HX
+'''
+from collections import deque
 from functools import lru_cache
 import math
 import random
@@ -10,17 +14,17 @@ PACMAN_EATEN_SCORE = -500
 PACMAN_WIN_SCORE = 500
 PACMAN_MOVING_SCORE = -1
 
-BEST_PERFORM = {
-    1: 164,
-    2: 2,
-    3: 0,
-    4: 1966,
-    5: 6,
-    6: 27,
-    7: 2,
-    8: 7,
-    9: 65
-}
+# BEST_PERFORM = {
+#     1: 164,
+#     2: 2,
+#     3: 0,
+#     4: 1966,
+#     5: 6,
+#     6: 27,
+#     7: 2,
+#     8: 7,
+#     9: 65
+# }
 
 class Actor:
     def __init__(self, name, i, j, n, m):
@@ -100,9 +104,40 @@ class Scheduler:
         self.ghosts = ghosts
         self.foods = foods
         self.wall = wall
-        self.start = self.pacman.raw_pos()    
+        self.start = self.pacman.raw_pos()
+        self.q = deque()
+        self.vis = set()
+    
+    @lru_cache(maxsize=32)
+    def q_append(self, u, v, d):
+        for a, b in [[0, 1], [0, -1], [1, 0], [-1, 0]]:
+            a,b = u+a,v+b
+            if f"{a},{b}" not in self.vis and f"{a},{b}" not in self.wall:
+                self.q.append([a,b, d+1])
 
-    def add_score(self):
+    def bfs(self, i, j):
+        self.q.clear()
+        self.vis.clear()
+        self.q.append([i, j, 0])
+        closest_ghost = 0
+        gs = set(g.position() for g in self.ghosts)
+        fd = self.foods
+        while len(self.q)>0:
+            u, v, d = self.q.popleft()
+            self.vis.add(f"{u},{v}")
+            if d > 3:break
+            if f"{u},{v}" in gs:
+                closest_ghost = d+1
+                break
+            # add food score
+            # food score = eat food - walk cost
+            if f"{u},{v}" in fd:
+                closest_ghost += EAT_FOOD_SCORE
+            self.q_append(u, v, d)
+        return closest_ghost 
+
+    # @lru_cache(maxsize=8)
+    def add_score(self, i, j):
         """minimax k state score evaluate function.
 
         Args:
@@ -113,32 +148,16 @@ class Scheduler:
             float: the score value for minimax
         """
         # it is a difficult task to design the score evalution function
-        i, j = self.pacman.raw_pos()
-        uvlist = [[n.i, n.j] for n in self.ghosts]
-        # only when pacman is too close to ghost, it scared
-        dist = min(abs(i-u)+abs(j-v) for u, v in uvlist)
-        score = PACMAN_EATEN_SCORE if dist < 2 else dist
-        fd = min(abs(i-int(f.split(',')[0]))+abs(j-int(f.split(',')[1])) for f in self.foods)
-        # only if pacman eat food, it get score, or it just pay to walk
-        score += EAT_FOOD_SCORE if fd == 0 else -fd
-        return score
+        return self.bfs(i, j)
 
-    @lru_cache(maxsize=None)
+    # @lru_cache(maxsize=4)
     def minimax_score(self, k: int, begin: int, turn: int, a: float=float('-inf'), b: float=float('inf')):
-        """score calculate node in k moves
-
-        Args:
-            node (List[GhostActor]): list of actor
-            k (int): k depth
-            begin (int): entry actor
-            turn (int): who is current actor
-
-        Returns:
-            float: expecti max score
-        """
-        # terminate
+        # minimax tree
+        
+        # terminate, minimax tree node
         if k <= 0:
-            return self.add_score()
+            i, j = self.pacman.raw_pos()
+            return self.add_score(i, j)
 
         elif turn == 0:
             # pacman maximize
@@ -149,15 +168,19 @@ class Scheduler:
             if len(moves) == 0:
                 return score
             org = self.pacman.raw_pos()
+            gs = [n.position() for n in self.ghosts]
             for move in moves:
                 self.pacman.act(move)
                 # failed on pacman was eaten
-                if self.pacman.position() in [n.position() for n in self.ghosts]:
+                # if this state near to ghost, then it would be eaten by ghost next moment
+                if self.pacman.position() in gs:
                     return PACMAN_EATEN_SCORE
+                # alpha-beta pruning
                 score += max(score, self.minimax_score(k, begin, (turn+1) % (len(self.ghosts)+1), a, b))
                 a = max(a, score)
                 if b <= a:
                     break
+            # reset pacman state
             self.pacman.act(org)
             return score
         else:
@@ -170,16 +193,20 @@ class Scheduler:
             org = self.ghosts[turn-1].raw_pos()
             for move in moves:
                 self.ghosts[turn-1].act(move)
+                # if ghost win, stop (min)
                 if self.ghosts[turn-1].position() == self.pacman.position():
                     return PACMAN_EATEN_SCORE
+                # alpha-beta pruning
                 score = min(score, self.minimax_score(k, begin, (turn+1) % (len(self.ghosts)+1), a, b))
                 b = min(b, score)
                 if b <= a:
                     break
+            # reset ghost state
             self.ghosts[turn-1].act(org)
             return score
     
     def minimax_move(self, k, begin: int=0):
+        # root of minimax
         # start moving
         if begin == 0:
             moves = self.pacman.alter_moves(self.wall, self.ghosts)
@@ -203,7 +230,11 @@ class Scheduler:
         else:
             ms = min(scores)
         best = [i for i in range(len(scores)) if scores[i] == ms]
-        return random.choice([moves[i] for i in best])
+        try:
+            move = random.choice([moves[i] for i in best])
+            return move
+        except:
+            return None
         
     
     def process(self, tick=0, k=10):
@@ -222,7 +253,7 @@ class Scheduler:
                     if ghost.position() == self.pacman.position():
                         raise Exception("Ghost Win!")
         except Exception as e:
-            # print(e)
+            print(e)
             # bad terminate
             if len(self.foods)>0:
                 result.append("WIN: Ghost")
@@ -233,7 +264,7 @@ class Scheduler:
         
 
 def p5(k, seed, state):
-    random.seed(seed)
+    # random.seed(seed)
     tick = 0
     result = [f"seed: {seed}\n", f"{tick}\n"]
     n, m = len(state), len(state[0])
@@ -279,7 +310,7 @@ if __name__ == "__main__":
     print('k:',k)
     print('num_trials:',num_trials)
     print('verbose:',verbose)
-    problem['seed'] = BEST_PERFORM[test_case_id]
+    # problem['seed'] = BEST_PERFORM[test_case_id]
     start = time.time()
     win_count = 0
     for i in range(num_trials):
