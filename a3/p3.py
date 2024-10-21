@@ -130,13 +130,13 @@ class Env:
         return result
         
 
-def p2(discount, noise, livingReward, iterations, grid):
+def p3(discount, noise, livingReward, iterations, grid):
     env = Env(discount, noise, livingReward, iterations, grid)
     result = env.process().rstrip('\n')
     return result
 
 def value_iteration(problem):
-    result = p2(**problem)
+    result = p3(**problem)
     return result
 
 if __name__ == "__main__":
