@@ -69,8 +69,8 @@ class Env:
             else:
                 result.append([i,j])
         return result
-    
-    def argmax(self, i, j):
+        
+    def argmax_expect_Q(self, i, j):
         if [i, j] in self.world['#']:
             return '#'
         for pos, _ in self.exit_state:
@@ -78,9 +78,6 @@ class Env:
                 return 'x'
         
         ret, val = 'N', float('-inf')
-        # act = [self.get_neibor([i,j],n)[0] for n in self.directs.keys()]
-        # act = [self.Q[a][b] for a,b in act]
-        # ret = list(self.directs.keys())[act.index(max(act))]
         for d0 in self.actions.keys():
             tmpval = 0
             neibors = self.get_neibor([i, j], d0)
@@ -88,11 +85,15 @@ class Env:
                 a, b = neibors[idx]
                 noise = self.noise if idx > 0 else 1 - 2 * self.noise
                 tmpval += noise * self.Q[a][b]
-            if tmpval>val:
+            # sometimes occurs slight diff between values
+            # like: -3.2800...1 and -3.2800...5
+            # they should be the same
+            # the epsilon here is not the best
+            if tmpval-val>1e-5:
                 ret = d0
                 val = tmpval
         return ret
-            
+                
     def process(self):
         result = ""
         iteration = 0
@@ -105,14 +106,14 @@ class Env:
             Q = copy.deepcopy(self.Q)
             for i in range(self.n):
                 for j in range(self.m):
-                    # off-policy
-                    intend = self.argmax(i, j)
+                    intend = self.argmax_expect_Q(i, j)
                     value = 0
                     if intend == 'x':
                         value += int(self.grid[i][j])
                     elif intend == '#':
                         continue
                     else:
+                        # off-policy
                         self.policy[i][j] = intend
                         value += self.livingReward
                         neibors = self.get_neibor([i, j], intend)
@@ -139,8 +140,8 @@ def value_iteration(problem):
     return result
 
 if __name__ == "__main__":
-    # test_case_id = int(sys.argv[1])
-    test_case_id = 3
+    test_case_id = int(sys.argv[1])
+    # test_case_id = 3
     problem_id = 3
     # for test_case_id in range(5):
     grader.grade(problem_id, test_case_id, value_iteration, parse.read_grid_mdp_problem_p3)

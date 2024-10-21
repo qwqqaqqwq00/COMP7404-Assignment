@@ -28,7 +28,7 @@ def check_test_case(problem_id, test_case_id, student_code_problem, student_code
             solution = color_diff(student_solution, solution)
             # solution = color_diff(solution, student_solution)
             for l1, l2 in zip(student_solution.split('\n'), solution.split('\n')):
-                print("{:<40}".format(l1)+"{:<40}".format(l2))
+                print("{:<50}".format(l1)+"{:<50}".format(l2))
             # print('Your solution')
             # print(student_solution)
             # print('Correct solution')
