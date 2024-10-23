@@ -174,12 +174,12 @@ def TDLearning(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--discount", type=float, default=0.9)
-    parser.add_argument("--noise", type=float, default=0.1)
-    parser.add_argument("--livingReward", type=float, default=-0.1)
-    parser.add_argument("--stop_epsilon", type=float, default=1e-7)
-    parser.add_argument("--alpha", type=float, default=0.7)
-    parser.add_argument("--grid_file", type=str, default='test_cases/p4/1.prob')
+    parser.add_argument("--discount", help="discount", type=float, default=0.9)
+    parser.add_argument("--noise", help="noise", type=float, default=0.2)
+    parser.add_argument("--livingReward", help="livingReward", type=float, default=-0.1)
+    parser.add_argument("--stop_epsilon", help="the spsilon decide when to stop", type=float, default=1e-7)
+    parser.add_argument("--alpha", "alpha decide the weight of update Q table", type=float, default=0.8)
+    parser.add_argument("--grid_file", help="grid world file path, sep=','", type=str, default='test_cases/p4/1.prob')
     args = parser.parse_args()
     
     TDLearning(args)
