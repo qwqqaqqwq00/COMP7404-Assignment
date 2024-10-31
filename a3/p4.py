@@ -198,7 +198,7 @@ class Env:
                         noise = self.noise if idx > 0 else 1 - 2 * self.noise
                         value += self.discount * noise * self.Q[a][b]
                     # update Q table
-                    Q[i][j] = value * self.alpha + (1 - self.alpha) * self.Q[i][j] # + self.livingReward
+                    Q[i][j] = value * self.alpha + (1 - self.alpha) * self.Q[i][j]
             
             # calculate validation of policy iteration after finish a pathway.
             # calculate loss use MAE Loss and exit when loss lower than stop_epsilon.
@@ -212,7 +212,6 @@ class Env:
         print(self.print_pi())
         return result
         
-
 def p4(discount, noise, livingReward, stop_epsilon, alpha, grid, **kwargs):
     env = Env(discount, noise, livingReward, stop_epsilon, alpha, grid)
     result = env.process().rstrip('\n')
@@ -252,6 +251,13 @@ if __name__ == "__main__":
     
     # find usage:
     # a3 $ python p4.py --help
+    
+    # IMPORTANT:
+    # analysis:
+    # discount to control rate of a Value step for value iteration
+    # alpha control rate of Q step for policy iteration
+    # noise control the random rate of steps to visit visited block less, it should range from 0.00 to 0.33
+    # stop epsilon control the stop
     
     parser = argparse.ArgumentParser()
     parser.add_argument("--grid_file", help="params file path or grid world file path, sep=','", type=str, default='test_cases/p2/7.prob', required=True)
