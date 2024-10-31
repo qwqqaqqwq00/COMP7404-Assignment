@@ -4,6 +4,7 @@ import random
 import re
 from typing import List
 
+# file read code here
 class Reader:
     def __init__(self, args, overwrite: bool) -> None:
         self.args = args
@@ -46,9 +47,9 @@ class Reader:
                     problem[k] = float(v)
             except:
                 pass
-        print(problem)
         return problem
 
+#major code execution code here
 class Env:
     def __init__(self, discount: float, noise: float, livingReward: float, stop_eps: float, alpha: float, grid: List[List[str]]) -> None:
         self.actions = {'N': [-1,0], 'E':[0,1], 'S':[1,0], 'W':[0,-1]}
@@ -167,13 +168,18 @@ class Env:
         iteration = 0
         loss = float('inf')
         # start state
+        # stop until loss is small enough
         while loss > self.stop_eps:
+            # setup start state
             self.setup_agents()
             iteration += 1
             intend = ''
+            # save previous Q table
             Q = copy.deepcopy(self.Q)
+            # while not in exit state
             while intend != 'x':
                 i, j = self.agents
+                # select intention by epsilon greedy
                 intend = self.epsilon_greedy(i, j)
                 value = 0
                 if intend == 'x':
@@ -182,7 +188,7 @@ class Env:
                 elif intend == '#':
                     continue
                 else:
-                    # off-policy
+                    # save policy
                     self.policy[i][j] = self.argmax_policy(i, j)
                     value += self.livingReward
                     neibors = self.get_neibor([i, j], intend)
@@ -191,6 +197,7 @@ class Env:
                         a, b = neibors[idx]
                         noise = self.noise if idx > 0 else 1 - 2 * self.noise
                         value += self.discount * noise * self.Q[a][b]
+                    # update Q table
                     Q[i][j] = value * self.alpha + (1 - self.alpha) * self.Q[i][j] # + self.livingReward
             
             # calculate validation of policy iteration after finish a pathway.
@@ -212,17 +219,15 @@ def p4(discount, noise, livingReward, stop_epsilon, alpha, grid, **kwargs):
     return result
 
 def TDLearning(args):
-    args = Reader(args, args.overwrite).args
+    try:
+        args = Reader(args, args.overwrite).args
+    except:
+        print("Unexpected Parameters.")
     result = p4(args.discount, args.noise, args.livingReward, args.stop_epsilon, args.alpha, args.grid)
     return result
 
 if __name__ == "__main__":
-    # grid file format as:
-    # _,_,_,1
-    # _,#,_,-1
-    # S,_,_,_
-    
-    # or use prob file like:
+    # use prob file like:
     # discount: 0.5
     # noise: 0.2
     # livingReward: 0.1
@@ -234,14 +239,27 @@ if __name__ == "__main__":
     #     S    _    _    _
     # by using params overwrite cmdline and set file path in param grid file
     
+    # or grid file format as with set overwrite to False
+    # _,_,_,1
+    # _,#,_,-1
+    # S,_,_,_
+    
+    # using --help to show tips
+    
+    # a case of run this code:
+    # ~ $ cd a3
+    # a3 $ python p4.py --grid_file test_cases/p2/7.prob
+    
+    # find usage:
+    # a3 $ python p4.py --help
+    
     parser = argparse.ArgumentParser()
+    parser.add_argument("--grid_file", help="params file path or grid world file path, sep=','", type=str, default='test_cases/p2/7.prob', required=True)
+    parser.add_argument("--overwrite", help="decide params in file or params in cmdline", type=bool, default=True)
     parser.add_argument("--discount", help="discount", type=float, default=0.9)
     parser.add_argument("--noise", help="noise", type=float, default=0.2)
     parser.add_argument("--livingReward", help="livingReward", type=float, default=0.0)
     parser.add_argument("--stop_epsilon", help="the spsilon decide when to stop", type=float, default=1e-7)
     parser.add_argument("--alpha", help="alpha decide the weight of update Q table", type=float, default=0.5)
-    parser.add_argument("--grid_file", help="grid world file path, sep=','", type=str, default='test_cases/p2/7.prob')
-    parser.add_argument("--overwrite", help="decide params in file or params in cmdline", type=bool, default=False)
     args = parser.parse_args()
-    
     TDLearning(args)
